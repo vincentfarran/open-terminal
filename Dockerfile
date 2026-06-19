@@ -21,6 +21,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     jq xmlstarlet sqlite3 \
     # Media & documents
     ffmpeg pandoc imagemagick texlive-latex-base \
+    librsvg2-bin poppler-utils \
+    # WeasyPrint's rendering engine (Cairo/Pango text shaping + gdk-pixbuf
+    # image decoding) and fontconfig's matching engine. No CJK/emoji font
+    # files are installed here on purpose: they're supplied at runtime via
+    # a read-only bind mount of the host's /usr/share/fonts. entrypoint.sh
+    # must run fc-cache -f on startup, since the mount doesn't exist at
+    # build time and fontconfig needs to index it fresh.
+    fontconfig \
+    libcairo2 libpango-1.0-0 libpangoft2-1.0-0 libgdk-pixbuf-2.0-0 \
+    shared-mime-info \
     # Compression
     zip unzip tar gzip bzip2 xz-utils zstd p7zip-full \
     # System
@@ -55,7 +65,8 @@ RUN pip install --no-cache-dir \
     pyyaml toml jsonlines \
     tqdm rich \
     openpyxl weasyprint \
-    python-docx python-pptx pypdf csvkit
+    python-docx python-pptx pypdf csvkit \
+    jinja2 Pillow reportlab
 
 COPY . .
 # Create a capability-bearing Python copy for the server process only.
@@ -75,7 +86,15 @@ WORKDIR /home/user
 
 EXPOSE 8000
 
-COPY entrypoint.sh /app/entrypoint.sh
+# Runtime requirement (not enforceable at build time): bind-mount the host's
+# fonts read-only, e.g. docker run -v /usr/share/fonts:/usr/share/fonts:ro.
+# WeasyPrint discovers them automatically via fontconfig. ReportLab does not
+# auto-discover anything -- only register fonts it can actually parse:
+#   pdfmetrics.registerFont(TTFont('Droid', '/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf'))
+# Do not register any Noto Sans/Serif CJK file with ReportLab -- they're CFF
+# (PostScript) outline fonts, and ReportLab's TTFont parser only supports
+# TrueType glyf outlines. It will raise TTFError regardless of subfontIndex.
+COPY --chmod=0755 entrypoint.sh /app/entrypoint.sh
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/app/entrypoint.sh"]
 CMD ["run"]
