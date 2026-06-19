@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 
+# Bind mount doesn't exist at build time, so fontconfig's cache must be
+# rebuilt fresh on every container start to pick up the host's fonts.
+fc-cache -f
+
 # -----------------------------------------------------------------------
 # Docker-secrets support: resolve <VAR>_FILE → <VAR>
 # Follows the convention used by the official PostgreSQL image.
